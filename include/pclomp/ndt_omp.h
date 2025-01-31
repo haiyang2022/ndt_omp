@@ -48,7 +48,10 @@
 #include <unsupported/Eigen/NonLinearOptimization>
 
 namespace pclomp
-{
+{	// 枚举定义邻域搜索方式:
+	// KDTREE：使用 KD-Tree 进行邻域搜索
+	// DIRECT26 / DIRECT7 / DIRECT1：基于体素直接搜索
+	// （一次取 26 / 7 / 1 个周边邻域体素），通常用于加速邻域查找
 	enum NeighborSearchMethod {
 		KDTREE,
 		DIRECT26,
@@ -67,9 +70,11 @@ namespace pclomp
 	  * \note Math refactored by Todor Stoyanov.
 	  * \author Brian Okorn (Space and Naval Warfare Systems Center Pacific)
 	  */
+	// 定义一个 NDT 模板类，继承自 PCL 的 pcl::Registration 基类
 	template<typename PointSource, typename PointTarget>
 	class NormalDistributionsTransform : public pcl::Registration<PointSource, PointTarget>
 	{
+		// 定义了一系列 智能指针与点云类型 的别名
 	protected:
 
 		typedef typename pcl::Registration<PointSource, PointTarget>::PointCloudSource PointCloudSource;
@@ -84,8 +89,10 @@ namespace pclomp
 		typedef pcl::PointIndices::ConstPtr PointIndicesConstPtr;
 
 		/** \brief Typename of searchable voxel grid containing mean and covariance. */
+		// VoxelGridCovariance：存储目标点云中每个体素 (voxel) 的均值与协方差等统计数据，用于 NDT 优化
 		typedef pclomp::VoxelGridCovariance<PointTarget> TargetGrid;
 		/** \brief Typename of pointer to searchable voxel grid. */
+		// 通过 TargetGrid 与其指针类型加速对体素数据的访问
 		typedef TargetGrid* TargetGridPtr;
 		/** \brief Typename of const pointer to searchable voxel grid. */
 		typedef const TargetGrid* TargetGridConstPtr;
@@ -94,7 +101,7 @@ namespace pclomp
 
 
 	public:
-
+	// 智能指针：兼容 PCL 1.10 及之前不同版本的 shared_ptr 实现
 #if PCL_VERSION >= PCL_VERSION_CALC(1, 10, 0)
 		typedef pcl::shared_ptr< NormalDistributionsTransform<PointSource, PointTarget> > Ptr;
 		typedef pcl::shared_ptr< const NormalDistributionsTransform<PointSource, PointTarget> > ConstPtr;
@@ -111,7 +118,7 @@ namespace pclomp
 
 		/** \brief Empty destructor */
 		virtual ~NormalDistributionsTransform() {}
-
+	// 设置 NDT 计算中使用的线程数量
     void setNumThreads(int n) {
       num_threads_ = n;
     }
@@ -119,6 +126,8 @@ namespace pclomp
 		/** \brief Provide a pointer to the input target (e.g., the point cloud that we want to align the input source to).
 		  * \param[in] cloud the input point cloud target
 		  */
+		// 重写 setInputTarget,覆盖 Registration 基类的 setInputTarget 函数
+		// 在设置目标点云后会调用 init() 函数，对目标点云进行体素栅格化并计算均值、协方差等
 		inline void
 			setInputTarget(const PointCloudTargetConstPtr &cloud)
 		{
@@ -129,6 +138,10 @@ namespace pclomp
 		/** \brief Set/change the voxel grid resolution.
 		  * \param[in] resolution side length of voxels
 		  */
+		// 设置参数:
+		// resolution_：每个体素的边长
+		// step_size_：NDT 中 More-Thuente 线搜索的 最大步长
+		// outlier_ratio_：用于处理离群点的比率（NDT 误差模型中用到）
 		inline void
 			setResolution(float resolution)
 		{
@@ -185,7 +198,7 @@ namespace pclomp
 		{
 			outlier_ratio_ = outlier_ratio;
 		}
-
+		// 设置邻域搜索方式（前面枚举定义的 KDTREE / DIRECT26 / DIRECT7 / DIRECT1）
 		inline void setNeighborhoodSearchMethod(NeighborSearchMethod method) {
 			search_method = method;
 		}
@@ -193,6 +206,7 @@ namespace pclomp
 		/** \brief Get the registration alignment probability.
 		  * \return transformation probability
 		  */
+		// trans_probability_：配准完成后的 变换概率（NDT 对数似然值转化的衡量指标）
 		inline double
 			getTransformationProbability() const
 		{
@@ -202,6 +216,7 @@ namespace pclomp
 		/** \brief Get the number of iterations required to calculate alignment.
 		  * \return final number of iterations
 		  */
+		// nr_iterations_：算法最终迭代次数
 		inline int
 			getFinalNumIteration() const
 		{
@@ -212,6 +227,8 @@ namespace pclomp
 		  * \param[in] x transformation vector of the form [x, y, z, roll, pitch, yaw]
 		  * \param[out] trans affine transform corresponding to given transformation vector
 		  */
+		// 将 6 维向量 [x, y, z, roll, pitch, yaw] 转换为 4x4 变换矩阵或 Eigen::Affine3f。
+		// 用于表示 位姿（平移 + 旋转）
 		static void
 			convertTransform(const Eigen::Matrix<double, 6, 1> &x, Eigen::Affine3f &trans)
 		{
@@ -235,10 +252,12 @@ namespace pclomp
 
 		// negative log likelihood function
 		// lower is better
+		// 评分函数
+		// 负对数似然函数：用于计算 NDT 模型下某一变换对应的匹配得分（score）。分数越低，表示匹配效果越好。
 		double calculateScore(const PointCloudSource& cloud) const;
 
 	protected:
-
+		// protected范围，NDT 算法的内部实现，包括对每个迭代步骤的计算和线搜索处理
 		using pcl::Registration<PointSource, PointTarget>::reg_name_;
 		using pcl::Registration<PointSource, PointTarget>::getClassName;
 		using pcl::Registration<PointSource, PointTarget>::input_;
@@ -259,6 +278,7 @@ namespace pclomp
 		/** \brief Estimate the transformation and returns the transformed source (input) as output.
 		  * \param[out] output the resultant input transformed point cloud dataset
 		  */
+		// 不带初始位姿的重载，默认使用单位矩阵作为初始变换
 		virtual void
 			computeTransformation(PointCloudSource &output)
 		{
@@ -269,10 +289,15 @@ namespace pclomp
 		  * \param[out] output the resultant input transformed point cloud dataset
 		  * \param[in] guess the initial gross estimation of the transformation
 		  */
+		// 核心配准函数：给定初始变换 guess，执行 NDT，对源点云进行若干轮迭代，输出最终配准到目标点云的结果。
 		virtual void
 			computeTransformation(PointCloudSource &output, const Eigen::Matrix4f &guess);
 
 		/** \brief Initiate covariance voxel structure. */
+		// 构建体素栅格：调用 VoxelGridCovariance 的 setLeafSize 设置体素尺寸
+		// setInputCloud：传入目标点云
+		// filter(true)：构建体素网格，并 为每个体素计算均值和协方差
+		// 目标点云被分块到若干体素中，每个体素记录了点云分布的统计信息
 		void inline
 			init()
 		{
@@ -290,6 +315,10 @@ namespace pclomp
 		  * \param[in] p the current transform vector
 		  * \param[in] compute_hessian flag to calculate hessian, unnecessary for step calculation.
 		  */
+		// 在 NDT 的迭代中，会基于当前位姿参数 p（6D），将源点云变换后得到 trans_cloud，并计算：
+		// score_gradient：目标函数（负对数似然）的梯度。
+		// hessian：目标函数的hessian matrix。
+		// 这两个量用于基于Gaussian-Newton或类似方法来迭代求解最优位姿
 		double
 			computeDerivatives(Eigen::Matrix<double, 6, 1> &score_gradient,
 				Eigen::Matrix<double, 6, 6> &hessian,
@@ -305,6 +334,8 @@ namespace pclomp
 		  * \param[in] c_inv covariance of occupied covariance voxel
 		  * \param[in] compute_hessian flag to calculate hessian, unnecessary for step calculation.
 		  */
+		// 更新单个点对梯度与海森矩阵的贡献。
+		// 每个落入同一体素的点，都要计算相应的误差并加到总梯度和海森矩阵上
 		double
 			updateDerivatives(Eigen::Matrix<double, 6, 1> &score_gradient,
 				Eigen::Matrix<double, 6, 6> &hessian,
@@ -318,6 +349,7 @@ namespace pclomp
 		  * \param[in] p the current transform vector
 		  * \param[in] compute_hessian flag to calculate hessian, unnecessary for step calculation.
 		  */
+		// 对 旋转量（roll/pitch/yaw） 预先计算一些中间量，方便后续快速更新梯度和海森矩阵
 		void
 			computeAngleDerivatives(Eigen::Matrix<double, 6, 1> &p, bool compute_hessian = true);
 
@@ -326,6 +358,7 @@ namespace pclomp
 		  * \param[in] x point from the input cloud
 		  * \param[in] compute_hessian flag to calculate hessian, unnecessary for step calculation.
 		  */
+		// 计算 点在局部坐标变换下 的偏导信息，这些信息会被用来求梯度和海森矩阵
 		void
 			computePointDerivatives(Eigen::Vector3d &x, Eigen::Matrix<double, 3, 6>& point_gradient_, Eigen::Matrix<double, 18, 6>& point_hessian_, bool compute_hessian = true) const;
 
@@ -338,6 +371,7 @@ namespace pclomp
 		  * \param[in] trans_cloud transformed point cloud
 		  * \param[in] p the current transform vector
 		  */
+		// 单独计算 海森矩阵 的函数，有时可以只更新梯度，不更新海森矩阵，以节省计算时间
 		void
 			computeHessian(Eigen::Matrix<double, 6, 6> &hessian,
 				PointCloudSource &trans_cloud,
@@ -368,6 +402,7 @@ namespace pclomp
 		  * \param[in,out] trans_cloud transformed point cloud, \f$ X \f$ transformed by \f$ T(\vec{p},\vec{x}) \f$ in Algorithm 2 [Magnusson 2009]
 		  * \return final step length
 		  */
+		// More-Thuente 线搜索：用于确定在梯度下降/牛顿迭代时，每次迭代的步长。
 		double
 			computeStepLengthMT(const Eigen::Matrix<double, 6, 1> &x,
 				Eigen::Matrix<double, 6, 1> &step_dir,
@@ -392,6 +427,7 @@ namespace pclomp
 		  * \param[in] g_t derivative at trial value, \f$ g_t \f$ in Moore-Thuente (1994), \f$ \psi'(\alpha_t) \f$ for Update Algorithm and \f$ \phi'(\alpha_t) \f$ for Modified Update Algorithm
 		  * \return if interval converges
 		  */
+		// More-Thuente 线搜索 的辅助函数，维护可行的步长区间并选择新的试探步长
 		bool
 			updateIntervalMT(double &a_l, double &f_l, double &g_l,
 				double &a_u, double &f_u, double &g_u,
@@ -445,13 +481,14 @@ namespace pclomp
 		{
 			return (g_a - mu * g_0);
 		}
-
+		// 这些成员变量存储了 NDT 算法的核心超参数 和 中间变量
 		/** \brief The voxel grid generated from target cloud containing point means and covariances. */
-		TargetGrid target_cells_;
+		TargetGrid target_cells_;	// 目标点云的统计信息（均值+协方差）的体素网格
 
 		//double fitness_epsilon_;
 
 		/** \brief The side length of voxels. */
+		// resolution_ / step_size_ / outlier_ratio_：对应论文中提到的 NDT 参数
 		float resolution_;
 
 		/** \brief The maximum step length. */
@@ -460,11 +497,12 @@ namespace pclomp
 		/** \brief The ratio of outliers of points w.r.t. a normal distribution, Equation 6.7 [Magnusson 2009]. */
 		double outlier_ratio_;
 
+		// gauss_d1_, gauss_d2_, gauss_d3_ 作为 归一化系数（normalization constants），用于将点与体素高斯分布之间的距离转换为概率密度
 		/** \brief The normalization constants used fit the point distribution to a normal distribution, Equation 6.8 [Magnusson 2009]. */
 		double gauss_d1_, gauss_d2_, gauss_d3_;
 
 		/** \brief The probability score of the transform applied to the input cloud, Equation 6.9 and 6.10 [Magnusson 2009]. */
-		double trans_probability_;
+		double trans_probability_;	// NDT 最终得到的变换质量评价
 
 		/** \brief Precomputed Angular Gradient
 		  *
@@ -497,7 +535,7 @@ namespace pclomp
 
 	public:
 		NeighborSearchMethod search_method;
-
+		// 保证在使用 Eigen 动态分配对象时对齐（内存对齐）以优化矩阵运算
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	};
 

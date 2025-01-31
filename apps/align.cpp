@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
   pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> source_handler(source_cloud, 0.0, 255.0, 0.0);
   pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> aligned_handler(aligned, 0.0, 0.0, 255.0);
   vis.addPointCloud(target_cloud, target_handler, "target");
-  vis.addPointCloud(source_cloud, source_handler, "source");
+  // vis.addPointCloud(source_cloud, source_handler, "source");
   vis.addPointCloud(aligned, aligned_handler, "aligned");
   vis.spin();
 
